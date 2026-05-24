@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>StockBot</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2300d68f'/%3E%3Cpolyline points='4,22 10,14 16,18 22,8 28,12' fill='none' stroke='%230d0f12' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0d10;
+  --surface:#13161e;
+  --surface2:#1a1e2a;
+  --border:#222736;
+  --border2:#2e3450;
+  --green:#00e5a0;
+  --green-dim:#00b87a;
+  --green-bg:#001f12;
+  --amber:#ffc94d;
+  --amber-bg:#1f1500;
+  --red:#ff6b6b;
+  --red-bg:#1f0a0a;
+  --blue:#5b8fff;
+  --text:#eef0f6;
+  --text2:#a0a8c0;
+  --muted:#5a6180;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'DM Sans',sans-serif;
+  --radius:12px;
+}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:100vh;
+}
+
+/* shell */
+.shell{
+  width:100%;max-width:780px;height:100vh;max-height:900px;
+  display:flex;flex-direction:column;
+  border:1px solid var(--border);
+  border-top:none;border-bottom:none;
+  background:var(--bg);
+  position:relative;overflow:hidden;
+}
+
+/* subtle grid bg */
+.shell::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:
+    linear-gradient(var(--border) 1px,transparent 1px),
+    linear-gradient(90deg,var(--border) 1px,transparent 1px);
+  background-size:40px 40px;
+  opacity:0.18;
+  z-index:0;
+}
+
+/* header */
+header{
+  padding:14px 20px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;
+  background:var(--surface);
+  flex-shrink:0;position:relative;z-index:2;
+}
+.logo{
+  width:30px;height:30px;background:var(--green);
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.logo svg{width:16px;height:16px}
+header h1{font-size:15px;font-weight:700;letter-spacing:0.01em}
+.badge{
+  font-family:var(--mono);font-size:10px;
+  color:var(--green);background:var(--green-bg);
+  border:1px solid var(--green-dim);
+  padding:2px 8px;border-radius:20px;
+}
+.thread-label{
+  font-family:var(--mono);font-size:11px;color:var(--muted);
+  background:var(--bg);border:1px solid var(--border);
+  padding:3px 8px;border-radius:4px;
+}
+.status-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--green);margin-left:auto;
+  box-shadow:0 0 8px var(--green);
+  animation:pulse 2.5s ease-in-out infinite;flex-shrink:0;
+}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(0.85)}}
+
+/* messages */
+.messages{
+  flex:1;overflow-y:auto;padding:20px;
+  display:flex;flex-direction:column;gap:18px;
+  scroll-behavior:smooth;position:relative;z-index:1;
+}
+.messages::-webkit-scrollbar{width:4px}
+.messages::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+.msg{display:flex;flex-direction:column;max-width:92%;gap:5px}
+.msg.user{align-self:flex-end;align-items:flex-end}
+.msg.bot{align-self:flex-start;align-items:flex-start}
+
+.bubble{
+  padding:11px 15px;border-radius:var(--radius);
+  font-size:14px;line-height:1.7;
+  white-space:pre-wrap;word-break:break-word;
+}
+.msg.user .bubble{
+  background:linear-gradient(135deg,#1e2c50,#1a2240);
+  border:1px solid #2d3f6e;color:var(--text);
+  border-bottom-right-radius:3px;
+}
+.msg.bot .bubble{
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--text);border-bottom-left-radius:3px;
+  font-size:13.5px;line-height:1.75;
+}
+.msg-time{font-size:11px;color:var(--muted);font-family:var(--mono);padding:0 4px}
+
+/* typing animation */
+.typing-bubble{
+  background:var(--surface);border:1px solid var(--border);
+  padding:14px 18px;border-radius:var(--radius);
+  border-bottom-left-radius:3px;
+  display:flex;gap:5px;align-items:center;
+}
+.typing-bubble span{
+  width:6px;height:6px;background:var(--muted);
+  border-radius:50%;animation:bop 1.3s ease-in-out infinite;
+}
+.typing-bubble span:nth-child(2){animation-delay:0.18s}
+.typing-bubble span:nth-child(3){animation-delay:0.36s}
+@keyframes bop{0%,60%,100%{transform:translateY(0);opacity:0.5}30%{transform:translateY(-6px);opacity:1}}
+
+/* animated text reveal */
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg.bot .bubble{animation:fadeUp 0.3s ease forwards}
+
+/* stock card */
+.stock-card{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:var(--radius);
+  border-bottom-left-radius:3px;
+  overflow:hidden;width:310px;
+  animation:fadeUp 0.4s ease forwards;
+}
+.stock-card-top{
+  padding:14px 16px 8px;
+  display:flex;align-items:flex-start;justify-content:space-between;
+}
+.stock-left{}
+.stock-symbol{
+  font-family:var(--mono);font-size:13px;font-weight:600;
+  color:var(--green);letter-spacing:0.05em;
+}
+.stock-price{
+  font-family:var(--mono);font-size:22px;font-weight:600;
+  color:var(--text);margin-top:2px;letter-spacing:-0.02em;
+}
+.stock-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.stock-change{
+  font-family:var(--mono);font-size:12px;font-weight:600;
+  padding:3px 9px;border-radius:6px;
+}
+.stock-change.up{background:var(--green-bg);color:var(--green);border:1px solid var(--green-dim)}
+.stock-change.down{background:var(--red-bg);color:var(--red);border:1px solid #7a3030}
+.stock-abs{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* stock grid stats */
+.stock-stats{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:0;border-top:1px solid var(--border);
+}
+.stat{
+  padding:8px 16px;
+  border-right:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+}
+.stat:nth-child(even){border-right:none}
+.stat:nth-last-child(-n+2){border-bottom:none}
+.stat-label{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase}
+.stat-value{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text);margin-top:2px}
+
+/* chart */
+.chart-wrap{padding:4px 8px 12px;height:80px}
+
+/* compare card */
+.compare-card{
+  background:var(--surface);border:1px solid var(--border2);
+  border-radius:var(--radius);border-bottom-left-radius:3px;
+  overflow:hidden;min-width:280px;max-width:400px;
+  animation:fadeUp 0.4s ease forwards;
+}
+.compare-header{
+  padding:10px 14px;border-bottom:1px solid var(--border);
+  font-family:var(--mono);font-size:11px;color:var(--muted);
+  letter-spacing:0.06em;text-transform:uppercase;
+}
+.compare-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;border-bottom:1px solid var(--border);
+  gap:12px;
+}
+.compare-row:last-child{border-bottom:none}
+.cr-sym{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--green);width:50px}
+.cr-price{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--text)}
+.cr-chg{font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:5px;min-width:60px;text-align:right}
+.cr-chg.up{background:var(--green-bg);color:var(--green)}
+.cr-chg.down{background:var(--red-bg);color:var(--red)}
+.cr-bar-wrap{flex:1;height:4px;background:var(--border2);border-radius:2px;overflow:hidden}
+.cr-bar{height:100%;border-radius:2px;transition:width 0.8s cubic-bezier(0.4,0,0.2,1)}
+
+/* alert card */
+.alert-card{
+  background:var(--amber-bg);border:1px solid #5a4000;
+  border-radius:var(--radius);border-bottom-left-radius:3px;
+  padding:12px 16px;min-width:240px;
+  animation:fadeUp 0.4s ease forwards;
+  display:flex;align-items:center;gap:12px;
+}
+.alert-icon{font-size:20px;flex-shrink:0}
+.alert-text{}
+.alert-title{font-family:var(--mono);font-size:12px;color:var(--amber);font-weight:600}
+.alert-desc{font-size:13px;color:var(--text);margin-top:3px;line-height:1.5}
+
+/* HITL */
+.hitl-banner{
+  margin:0 20px 12px;
+  background:#1c1400;border:1px solid #5a4000;
+  border-radius:var(--radius);padding:14px 16px;
+  display:none;flex-direction:column;gap:12px;flex-shrink:0;
+  position:relative;z-index:2;
+  animation:fadeUp 0.3s ease forwards;
+}
+.hitl-banner.visible{display:flex}
+.hitl-top{display:flex;align-items:center;gap:8px}
+.hitl-icon{
+  width:28px;height:28px;background:var(--amber-bg);
+  border:1px solid var(--amber);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;flex-shrink:0;
+}
+.hitl-title{font-family:var(--mono);font-size:11px;color:var(--amber);letter-spacing:0.08em;text-transform:uppercase;font-weight:600}
+.hitl-prompt{font-size:13.5px;color:var(--text);line-height:1.6;padding-left:36px}
+.hitl-actions{display:flex;gap:8px;padding-left:36px}
+.btn-approve,.btn-reject{
+  flex:1;padding:9px;border-radius:8px;border:none;
+  cursor:pointer;font-family:var(--mono);font-size:13px;font-weight:600;
+  transition:all 0.15s;letter-spacing:0.02em;
+}
+.btn-approve{background:var(--green);color:#0b0d10}
+.btn-approve:hover{background:#00ffb3;transform:translateY(-1px)}
+.btn-reject{background:var(--red-bg);border:1px solid var(--red);color:var(--red)}
+.btn-reject:hover{background:#2e1111;transform:translateY(-1px)}
+
+/* input */
+.input-bar{
+  border-top:1px solid var(--border);padding:14px 16px;
+  display:flex;align-items:center;gap:10px;
+  background:var(--surface);flex-shrink:0;position:relative;z-index:2;
+}
+.input-bar input{
+  flex:1;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;padding:11px 16px;color:var(--text);
+  font-family:var(--mono);font-size:13px;outline:none;
+  transition:border-color 0.2s,box-shadow 0.2s;
+}
+.input-bar input::placeholder{color:var(--muted)}
+.input-bar input:focus{border-color:var(--green-dim);box-shadow:0 0 0 3px rgba(0,229,160,0.08)}
+.input-bar input:disabled{opacity:0.4;cursor:not-allowed}
+.btn-send{
+  width:40px;height:40px;background:var(--green);border:none;
+  border-radius:10px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.15s;flex-shrink:0;
+}
+.btn-send:hover{background:#00ffb3;transform:translateY(-1px)}
+.btn-send:active{transform:scale(0.95)}
+.btn-send:disabled{opacity:0.3;cursor:not-allowed;transform:none}
+.btn-send svg{width:16px;height:16px}
+
+/* empty state */
+.empty{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:10px;color:var(--muted);font-size:13px;font-family:var(--mono);
+}
+.empty-icon{
+  width:56px;height:56px;background:var(--surface);
+  border:1px solid var(--border2);border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:24px;margin-bottom:4px;
+}
+.empty h2{font-size:15px;font-weight:600;color:var(--text);font-family:var(--sans)}
+.empty p{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;justify-content:center;max-width:420px}
+.chip{
+  background:var(--surface);border:1px solid var(--border2);
+  border-radius:20px;padding:7px 14px;
+  font-size:12px;cursor:pointer;color:var(--text2);font-family:var(--mono);
+  transition:all 0.15s;
+}
+.chip:hover{border-color:var(--green-dim);color:var(--green);background:#0d1a14}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 16 16" fill="none">
+        <polyline points="1,12 5,7 8,9 11,4 15,6" stroke="#0b0d10" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h1>StockBot</h1>
+    <span class="badge">AI Agent</span>
+    <div class="thread-label" id="thread-label">—</div>
+    <div class="status-dot" title="Connected"></div>
+  </header>
+
+  <div class="messages" id="messages">
+    <div class="empty" id="empty-state">
+      <div class="empty-icon">📈</div>
+      <h2>StockBot</h2>
+      <p>Real-time prices · Buy &amp; sell · Alerts · Compare</p>
+      <div class="chips">
+        <div class="chip" onclick="sendSuggestion('What is the price of AAPL?')">Price of AAPL</div>
+        <div class="chip" onclick="sendSuggestion('Compare AAPL, TSLA and NVDA')">Compare 3 stocks</div>
+        <div class="chip" onclick="sendSuggestion('Buy 10 shares of TSLA')">Buy 10 TSLA</div>
+        <div class="chip" onclick="sendSuggestion('Sell 5 shares of MSFT')">Sell 5 MSFT</div>
+        <div class="chip" onclick="sendSuggestion('Alert me when AAPL goes above $230')">Set price alert</div>
+        <div class="chip" onclick="sendSuggestion('How is NVDA performing today?')">NVDA today</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hitl-banner" id="hitl-banner">
+    <div class="hitl-top">
+      <div class="hitl-icon">⚠</div>
+      <div class="hitl-title">Approval Required</div>
+    </div>
+    <div class="hitl-prompt" id="hitl-prompt"></div>
+    <div class="hitl-actions">
+      <button class="btn-approve" onclick="resolveHITL('yes')">✓ Approve</button>
+      <button class="btn-reject" onclick="resolveHITL('no')">✕ Reject</button>
+    </div>
+  </div>
+
+  <div class="input-bar">
+    <input id="user-input" type="text"
+      placeholder="Ask about a stock, compare, buy, sell, or set an alert…"
+      onkeydown="if(event.key==='Enter')sendMessage()"/>
+    <button class="btn-send" id="send-btn" onclick="sendMessage()">
+      <svg viewBox="0 0 20 20" fill="none" stroke="#0b0d10" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="10" x2="17" y2="10"/>
+        <polyline points="11,4 17,10 11,16"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<script>
+const API_BASE = "http://localhost:8000";
+const threadId = "thread-" + Math.random().toString(36).slice(2,9);
+document.getElementById("thread-label").textContent = threadId;
+
+let waiting = false;
+
+const fmt = n => {
+  const v = parseFloat(n);
+  return isNaN(v) ? n : "$" + v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+};
+const fmtVol = v => {
+  if (!v) return "—";
+  const n = parseInt(v.replace(/,/g,""));
+  if (n >= 1e9) return (n/1e9).toFixed(2)+"B";
+  if (n >= 1e6) return (n/1e6).toFixed(2)+"M";
+  if (n >= 1e3) return (n/1e3).toFixed(1)+"K";
+  return v;
+};
+const now = () => new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+const hideEmpty = () => { const e=document.getElementById("empty-state"); if(e)e.remove(); };
+const box = () => document.getElementById("messages");
+
+function scrollBottom(){
+  const b=box(); b.scrollTop=b.scrollHeight;
+}
+
+// ── parse single stock ──────────────────────────────────────────────────
+function parseSingleStock(text){
+  const sym=text.match(/\b([A-Z]{2,5})\b/);
+  const price=text.match(/\$\s*([\d,]+\.\d{1,2})/);
+  const chgPct=text.match(/([+-][\d.]+)\s*%/);
+  const chgAbs=text.match(/([+-]\$[\d.]+)/);
+  const open=text.match(/[Oo]pen[:\s]+\$?([\d,]+\.?\d*)/);
+  const high=text.match(/[Hh]igh[:\s]+\$?([\d,]+\.?\d*)/);
+  const low=text.match(/[Ll]ow[:\s]+\$?([\d,]+\.?\d*)/);
+  const prev=text.match(/[Pp]rev(?:ious)?\s*[Cc]lose[:\s]+\$?([\d,]+\.?\d*)/);
+  const vol=text.match(/[Vv]olume[:\s]+([\d,]+)/);
+  if(!sym||!price) return null;
+  const p=parseFloat(price[1].replace(/,/g,""));
+  if(isNaN(p)||p<0.5) return null;
+  return {
+    symbol:sym[1], price:p,
+    changePct:chgPct?parseFloat(chgPct[1]):null,
+    changeAbs:chgAbs?chgAbs[1]:null,
+    open:open?parseFloat(open[1].replace(/,/g,"")):null,
+    high:high?parseFloat(high[1].replace(/,/g,"")):null,
+    low:low?parseFloat(low[1].replace(/,/g,"")):null,
+    prevClose:prev?parseFloat(prev[1].replace(/,/g,"")):null,
+    volume:vol?vol[1]:null,
+  };
+}
+
+// ── parse comparison ────────────────────────────────────────────────────
+function parseComparison(text){
+  const rows=[];
+  const lines=text.split("\n");
+  for(const line of lines){
+    const sym=line.match(/\b([A-Z]{2,5})\b/);
+    const price=line.match(/\$\s*([\d,]+\.\d{1,2})/);
+    const chg=line.match(/([+-][\d.]+)\s*%/);
+    if(sym&&price){
+      rows.push({
+        symbol:sym[1],
+        price:parseFloat(price[1].replace(/,/g,"")),
+        changePct:chg?parseFloat(chg[1]):null,
+      });
+    }
+  }
+  return rows.length>=2?rows:null;
+}
+
+// ── parse alert ─────────────────────────────────────────────────────────
+function parseAlert(text){
+  const match=text.match(/Alert set.*?([A-Z]{2,5}).*?(above|below).*?\$([\d.]+)/i);
+  if(!match) return null;
+  return{symbol:match[1],direction:match[2],price:match[3]};
+}
+
+// ── sparkline data ──────────────────────────────────────────────────────
+function sparkline(price){
+  const pts=[];let v=price*0.97;
+  for(let i=0;i<22;i++){v+=(Math.random()-0.47)*price*0.007;pts.push(+v.toFixed(2));}
+  pts.push(price);return pts;
+}
+
+// ── render stock card ───────────────────────────────────────────────────
+function appendStockCard(d){
+  const wrap=document.createElement("div");
+  wrap.className="msg bot";
+  const isUp=d.changePct===null?true:d.changePct>=0;
+  const color=isUp?"var(--green)":"var(--red)";
+  const chgStr=d.changePct!==null?(d.changePct>=0?"+":"")+d.changePct.toFixed(2)+"%":"";
+  const cid="c"+Math.random().toString(36).slice(2,7);
+
+  const stats=[
+    d.open?{l:"Open",v:fmt(d.open)}:null,
+    d.high?{l:"High",v:fmt(d.high)}:null,
+    d.low?{l:"Low",v:fmt(d.low)}:null,
+    d.prevClose?{l:"Prev Close",v:fmt(d.prevClose)}:null,
+    d.volume?{l:"Volume",v:fmtVol(d.volume)}:null,
+  ].filter(Boolean);
+
+  // pad to even
+  if(stats.length%2!==0) stats.push({l:"",v:""});
+
+  wrap.innerHTML=`
+    <div class="stock-card">
+      <div class="stock-card-top">
+        <div class="stock-left">
+          <div class="stock-symbol">${d.symbol}</div>
+          <div class="stock-price">$${d.price.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        </div>
+        <div class="stock-right">
+          ${chgStr?`<span class="stock-change ${isUp?"up":"down"}">${chgStr}</span>`:""}
+          ${d.changeAbs?`<span class="stock-abs">${d.changeAbs}</span>`:""}
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="${cid}"></canvas></div>
+      ${stats.length?`<div class="stock-stats">${stats.map(s=>`<div class="stat"><div class="stat-label">${s.l}</div><div class="stat-value">${s.v}</div></div>`).join("")}</div>`:""}
+    </div>
+    <div class="msg-time">${now()}</div>`;
+  box().appendChild(wrap);
+  scrollBottom();
+
+  requestAnimationFrame(()=>{
+    const canvas=document.getElementById(cid);
+    if(!canvas)return;
+    const sp=sparkline(d.price);
+    new Chart(canvas.getContext("2d"),{
+      type:"line",
+      data:{
+        labels:sp.map((_,i)=>i),
+        datasets:[{
+          data:sp,borderColor:color,borderWidth:1.8,
+          pointRadius:0,tension:0.45,fill:true,
+          backgroundColor:ctx=>{
+            const g=ctx.chart.ctx.createLinearGradient(0,0,0,70);
+            g.addColorStop(0,isUp?"rgba(0,229,160,0.22)":"rgba(255,107,107,0.22)");
+            g.addColorStop(1,"transparent");return g;
+          }
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{enabled:false}},
+        scales:{x:{display:false},y:{display:false}},
+        animation:{duration:1000,easing:"easeInOutQuart"}
+      }
+    });
+  });
+}
+
+// ── render comparison card ──────────────────────────────────────────────
+function appendCompareCard(rows){
+  const prices=rows.map(r=>r.price).filter(Boolean);
+  const maxP=Math.max(...prices);
+  const wrap=document.createElement("div");
+  wrap.className="msg bot";
+  wrap.innerHTML=`
+    <div class="compare-card">
+      <div class="compare-header">Stock Comparison</div>
+      ${rows.map(r=>{
+        const isUp=r.changePct===null?true:r.changePct>=0;
+        const chg=r.changePct!==null?(r.changePct>=0?"+":"")+r.changePct.toFixed(2)+"%":"—";
+        const barW=maxP>0?Math.round((r.price/maxP)*100):0;
+        const barColor=isUp?"var(--green)":"var(--red)";
+        return `<div class="compare-row">
+          <span class="cr-sym">${r.symbol}</span>
+          <span class="cr-price">$${r.price.toFixed(2)}</span>
+          <div class="cr-bar-wrap"><div class="cr-bar" style="width:0%;background:${barColor}" data-w="${barW}"></div></div>
+          <span class="cr-chg ${isUp?"up":"down"}">${chg}</span>
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="msg-time">${now()}</div>`;
+  box().appendChild(wrap);
+  scrollBottom();
+  // animate bars
+  setTimeout(()=>{
+    wrap.querySelectorAll(".cr-bar").forEach(b=>{
+      b.style.width=b.dataset.w+"%";
+    });
+  },100);
+}
+
+// ── render alert card ───────────────────────────────────────────────────
+function appendAlertCard(a){
+  const wrap=document.createElement("div");
+  wrap.className="msg bot";
+  wrap.innerHTML=`
+    <div class="alert-card">
+      <div class="alert-icon">🔔</div>
+      <div class="alert-text">
+        <div class="alert-title">Price Alert Set</div>
+        <div class="alert-desc">Notify when <b>${a.symbol}</b> goes <b>${a.direction}</b> <b>$${a.price}</b></div>
+      </div>
+    </div>
+    <div class="msg-time">${now()}</div>`;
+  box().appendChild(wrap);
+  scrollBottom();
+}
+
+// ── animated text typewriter ────────────────────────────────────────────
+function typewriterAppend(text){
+  hideEmpty();
+  const wrap=document.createElement("div");
+  wrap.className="msg bot";
+  const bubble=document.createElement("div");
+  bubble.className="bubble";
+  const time=document.createElement("div");
+  time.className="msg-time";
+  time.textContent=now();
+  wrap.appendChild(bubble);
+  wrap.appendChild(time);
+  box().appendChild(wrap);
+
+  let i=0;
+  const speed=12; // ms per char
+  function tick(){
+    if(i<text.length){
+      bubble.textContent+=text[i++];
+      scrollBottom();
+      setTimeout(tick,speed);
+    }
+  }
+  tick();
+}
+
+// ── append plain message ────────────────────────────────────────────────
+function appendMessage(role,text){
+  hideEmpty();
+  if(role==="bot"){
+    // detect what kind of response this is
+    const alertData=parseAlert(text);
+    if(alertData){ appendAlertCard(alertData); typewriterAppend(text); return; }
+
+    const compRows=parseComparison(text);
+    if(compRows){ appendCompareCard(compRows); typewriterAppend(text); return; }
+
+    const stock=parseSingleStock(text);
+    if(stock){ appendStockCard(stock); typewriterAppend(text); return; }
+
+    // default typewriter
+    typewriterAppend(text);
+    return;
+  }
+
+  // user message
+  hideEmpty();
+  const wrap=document.createElement("div");
+  wrap.className="msg user";
+  const bubble=document.createElement("div");
+  bubble.className="bubble";
+  bubble.textContent=text;
+  const time=document.createElement("div");
+  time.className="msg-time";
+  time.textContent=now();
+  wrap.appendChild(bubble);
+  wrap.appendChild(time);
+  box().appendChild(wrap);
+  scrollBottom();
+}
+
+function appendTyping(){
+  hideEmpty();
+  const wrap=document.createElement("div");
+  wrap.className="msg bot";
+  wrap.id="typing-indicator";
+  const bubble=document.createElement("div");
+  bubble.className="typing-bubble";
+  bubble.innerHTML="<span></span><span></span><span></span>";
+  wrap.appendChild(bubble);
+  box().appendChild(wrap);
+  scrollBottom();
+}
+function removeTyping(){const t=document.getElementById("typing-indicator");if(t)t.remove();}
+
+function setUI(disabled){
+  waiting=disabled;
+  document.getElementById("user-input").disabled=disabled;
+  document.getElementById("send-btn").disabled=disabled;
+}
+function showHITL(prompt){
+  document.getElementById("hitl-prompt").textContent=prompt;
+  document.getElementById("hitl-banner").classList.add("visible");
+}
+function hideHITL(){
+  document.getElementById("hitl-banner").classList.remove("visible");
+}
+
+async function sendMessage(){
+  if(waiting)return;
+  const input=document.getElementById("user-input");
+  const text=input.value.trim();
+  if(!text)return;
+  input.value="";
+  appendMessage("user",text);
+  await callChat(text);
+}
+function sendSuggestion(text){
+  document.getElementById("user-input").value=text;
+  sendMessage();
+}
+
+async function callChat(message){
+  setUI(true);appendTyping();
+  try{
+    const res=await fetch(`${API_BASE}/chat`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({thread_id:threadId,message}),
+    });
+    const data=await res.json();
+    removeTyping();
+    if(data.hitl_prompt){
+      if(data.reply)appendMessage("bot",data.reply);
+      showHITL(data.hitl_prompt);
+    }else{
+      appendMessage("bot",data.reply||"(no reply)");
+      setUI(false);
+    }
+  }catch(err){
+    removeTyping();
+    appendMessage("bot","⚠ Could not reach the API. Is FastAPI running on port 8000?");
+    setUI(false);
+  }
+}
+
+async function resolveHITL(decision){
+  hideHITL();
+  appendMessage("user",decision==="yes"?"✓ Approved":"✕ Rejected");
+  appendTyping();
+  try{
+    const res=await fetch(`${API_BASE}/chat/resume`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({thread_id:threadId,decision}),
+    });
+    const data=await res.json();
+    removeTyping();
+    if(data.hitl_prompt){
+      if(data.reply)appendMessage("bot",data.reply);
+      showHITL(data.hitl_prompt);
+    }else{
+      appendMessage("bot",data.reply||"(no reply)");
+      setUI(false);
+    }
+  }catch(err){
+    removeTyping();
+    appendMessage("bot","⚠ Resume request failed.");
+    setUI(false);
+  }
+}
+
+document.getElementById("user-input").focus();
+</script>
+</body>
+</html>
